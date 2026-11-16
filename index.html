@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Amazon注文履歴の分析ツール｜年別・カテゴリ・リピート・プライム会費</title>
+<meta name="description" content="Amazonの「マイデータをリクエストする」で受け取った注文履歴のZIPを読み込み、年別・月別の購入額、カテゴリ、リピート購入、高額の買い物、注文する時間帯、プライム会費とKindleの貸出を集計。読み込みと集計はブラウザの中だけで行う">
+<link rel="canonical" href="https://kotaooka.github.io/amazon-order-analyzer/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="QC Workbench">
+<meta property="og:title" content="Amazon注文履歴の分析ツール｜年別・カテゴリ・リピート・プライム会費">
+<meta property="og:description" content="Amazonの「マイデータをリクエストする」で受け取った注文履歴のZIPを読み込み、年別・月別の購入額、カテゴリ、リピート購入、高額の買い物、注文する時間帯、プライム会費とKindleの貸出を集計。読み込みと集計はブラウザの中だけで行う">
+<meta property="og:url" content="https://kotaooka.github.io/amazon-order-analyzer/">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:image" content="https://kotaooka.github.io/amazon-order-analyzer/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Amazon注文履歴アナライザー：年別の購入額を物品とデジタルに分けた棒グラフ">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1d5c96" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11161b" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="注文履歴の分析">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<script>
+  // 保存したテーマ（auto / light / dark）を描画前に当てる。キーは QC Workbench の全ツールで共通
+  try { const t = localStorage.getItem("qc-workbench-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* 保存できない環境 */ }
+</script>
+<style>
+/* 字体・配色は QC Workbench の各ツールと共通（DESIGN.md）。レイアウト：左に入力、右に図・結果。狭い画面では縦に積む */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --ink2: #475563;
+  --muted: #74818e;
+  --line: #d5dce3;
+  --grid: #e4e9ee;
+  --accent: #1d5c96;
+  --accent-ink: #ffffff;
+  --accent-weak: #e1ebf5;
+  --ok: #17703a; --ok-weak: #e2f2e7;
+  --warn: #8a5300; --warn-weak: #f8ecd9;
+  --ng: #ad2a22; --ng-weak: #f8e4e2;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #8c5bd6;
+  --f-ui: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  --f-num: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #19212a; --ink: #e6ecf2; --ink2: #a9b5c1; --muted: #7d8996;
+    --line: #2b3641; --grid: #253039; --accent: #6ba6df; --accent-ink: #0d1620; --accent-weak: #1c2f43;
+    --ok: #57c483; --ok-weak: #163222; --warn: #e3a84e; --warn-weak: #36280f; --ng: #f07a70; --ng-weak: #3a1c1a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #a07ae0; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #19212a; --ink: #e6ecf2; --ink2: #a9b5c1; --muted: #7d8996;
+  --line: #2b3641; --grid: #253039; --accent: #6ba6df; --accent-ink: #0d1620; --accent-weak: #1c2f43;
+  --ok: #57c483; --ok-weak: #163222; --warn: #e3a84e; --warn-weak: #36280f; --ng: #f07a70; --ng-weak: #3a1c1a;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #a07ae0; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 15px; line-height: 1.6; text-autospace: normal; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+header.top { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+.top-in { max-width: 1080px; margin: 0 auto; padding: 12px 16px; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.brand h1 { font-size: 1.15rem; margin: 0; letter-spacing: .02em; }
+.brand .std { font-size: .78rem; color: var(--muted); }
+.brand .home { font-size: .78rem; color: var(--muted); text-decoration: none; margin-right: -6px; }
+.brand .home:hover { color: var(--accent); text-decoration: underline; }
+.brand .crumb { font-size: .78rem; color: var(--muted); margin-right: -6px; }
+.brand .theme { margin-left: auto; }
+nav.tabs { display: flex; gap: 4px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs button { flex: 0 0 auto; border: 0; background: none; color: var(--ink2); font: inherit; font-size: .92rem; padding: 8px 12px 10px; cursor: pointer; border-bottom: 3px solid transparent; }
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 700; }
+nav.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.privacy { font-size: .8rem; color: var(--ok); margin: 0; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 16px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+.panel { display: grid; grid-template-columns: minmax(0, 330px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 760px) { .panel { grid-template-columns: minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.box h2 { font-size: .95rem; margin: 0; }
+.box h3 { font-size: .85rem; margin: 0; color: var(--ink2); font-weight: 700; }
+.hint { font-size: .8rem; color: var(--muted); margin: 0; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.fields.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.fields > .hint.wide { grid-column: 1 / -1; margin-top: -4px; }
+.hint.std.ng { color: var(--ng); }
+.field label, .field .lab { font-size: .8rem; color: var(--ink2); }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+input[type="text"], select { width: 100%; font: 500 .95rem var(--f-num); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+select.ui { font-family: var(--f-ui); font-weight: 400; }
+input.bad, select.bad { border-color: var(--ng); background: var(--ng-weak); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: inherit; font-size: .85rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex-wrap: wrap; }
+.seg button { border: 0; background: var(--bg); color: var(--ink2); font: inherit; font-size: .85rem; padding: 6px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.msg { border-radius: 6px; padding: 8px 10px; font-size: .88rem; }
+.msg.err { background: var(--ng-weak); color: var(--ng); }
+.msg.warn { background: var(--warn-weak); color: var(--warn); }
+.msg.ok { background: var(--ok-weak); color: var(--ok); }
+.msg.info { background: var(--accent-weak); color: var(--ink); }
+.msgs { display: flex; flex-direction: column; gap: 6px; }
+.sub { border-top: 1px dashed var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.figure { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); overflow: hidden; }
+.figure svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+.figure .pick { cursor: pointer; }
+.figure .pick:hover rect.hit { fill: var(--accent-weak); }
+.kpi { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kpi div { background: var(--bg); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+.kpi span { display: block; font-size: .72rem; color: var(--ink2); }
+.kpi b { font: 500 1.05rem var(--f-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi small { font-size: .72rem; color: var(--muted); }
+.kpi .ng b { color: var(--ng); } .kpi .ok b { color: var(--ok); }
+@media (max-width: 480px) { .kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+table.res { border-collapse: collapse; width: 100%; font-size: .88rem; }
+table.res th { text-align: left; font-weight: 400; color: var(--ink2); padding: 5px 8px 5px 0; vertical-align: top; }
+table.res th small { display: block; color: var(--muted); font-size: .74rem; }
+table.res td { font-family: var(--f-num); font-variant-numeric: tabular-nums; padding: 5px 0 5px 8px; text-align: right; white-space: nowrap; vertical-align: top; }
+table.res td .u { color: var(--muted); font-size: .8rem; margin-left: 3px; }
+table.res thead th { font-size: .78rem; color: var(--muted); text-align: right; padding-bottom: 2px; }
+table.res thead th:first-child { text-align: left; }
+table.res tr + tr { border-top: 1px solid var(--grid); }
+table.res tr.cur { background: var(--accent-weak); }
+.scroll { overflow-x: auto; }
+.judge { display: inline-block; border-radius: 4px; padding: 0 6px; margin-left: 6px; font-family: var(--f-ui); font-size: .8rem; font-weight: 700; }
+.judge.ok { background: var(--ok-weak); color: var(--ok); }
+.judge.ng { background: var(--ng-weak); color: var(--ng); }
+.judge.warn { background: var(--warn-weak); color: var(--warn); }
+.legend { display: flex; gap: 14px; font-size: .78rem; color: var(--ink2); flex-wrap: wrap; }
+.legend span::before { content: ""; display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; background: var(--c); border-radius: 2px; }
+.legend span.line::before { height: 3px; vertical-align: 3px; }
+.legend span.dash::before { height: 10px; background: transparent; border: 1.5px dashed var(--c); box-sizing: border-box; }
+footer { margin-top: 16px; font-size: .78rem; color: var(--muted); }
+footer a { color: inherit; }
+#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--surface); padding: 8px 14px; border-radius: 999px; font-size: .85rem; }
+.explain { line-height: 1.8; display: block; }
+.explain h1 { font-size: 1.2rem; margin: 0 0 8px; }
+.explain h2 { font-size: 1.08rem; margin: 28px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--accent-weak); }
+.explain h3 { font-size: .98rem; margin: 18px 0 6px; }
+.explain h4 { font-size: .92rem; margin: 14px 0 4px; }
+.explain pre { background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 12px; overflow-x: auto; font-size: .85rem; }
+.explain code { font-family: var(--f-num); }
+.explain table { border-collapse: collapse; font-size: .85rem; margin: 8px 0; }
+.explain th, .explain td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.explain th { background: var(--bg); color: var(--ink2); font-weight: 700; }
+.explain hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+.explain .figure { max-width: 460px; margin: 8px 0; }
+
+/* 読み込み */
+.drop { border: 2px dashed var(--line); border-radius: var(--r); padding: 18px 12px; text-align: center; color: var(--ink2); font-size: .88rem; cursor: pointer; background: var(--bg); }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-weak); color: var(--ink); }
+.drop b { display: block; font-size: .95rem; color: var(--ink); margin-bottom: 2px; }
+.files { list-style: none; margin: 0; padding: 0; font-size: .8rem; display: flex; flex-direction: column; gap: 3px; }
+.files li { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.files li .fn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink2); min-width: 0; flex: 1; }
+.files li .k { flex: 0 0 auto; border-radius: 4px; padding: 0 5px; background: var(--ok-weak); color: var(--ok); }
+.files li .k.no { background: var(--bg); color: var(--muted); }
+.files li .n { flex: 0 0 auto; font-family: var(--f-num); color: var(--muted); }
+.empty { color: var(--muted); font-size: .88rem; text-align: center; padding: 28px 8px; }
+/* KPI */
+.kpi.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 900px) { .kpi.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi .main b { font-size: 1.5rem; color: var(--accent); }
+.kpi > div > small { display: block; line-height: 1.4; margin-top: 2px; }
+.kpi b small { font-family: var(--f-ui); font-size: .72rem; color: var(--muted); margin-left: 2px; }
+/* グラフ */
+.figure svg text { font-family: var(--f-num); font-size: 10.5px; fill: var(--muted); }
+.figure svg text.lab { font-family: var(--f-ui); fill: var(--ink2); font-size: 11.5px; }
+.figure svg text.val { fill: var(--ink); }
+.figure svg .bar { fill: var(--s1); }
+.figure svg .bar2 { fill: var(--s2); }
+.figure svg .bar.sel { fill: var(--accent); }
+.figure svg .hit { fill: transparent; cursor: pointer; }
+.figure svg .hit:hover { fill: var(--accent-weak); fill-opacity: .55; }
+.figure svg .gl { stroke: var(--grid); }
+.figure svg .ax { stroke: var(--line); }
+.figure svg .avg { stroke: var(--ink2); stroke-dasharray: 4 3; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
+/* 表 */
+table.list { border-collapse: collapse; width: 100%; font-size: .86rem; }
+table.list th, table.list td { padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+table.list thead th { font-size: .76rem; color: var(--ink2); font-weight: 700; text-align: left; background: var(--bg); position: sticky; top: 0; white-space: nowrap; }
+table.list thead th.r, table.list td.r { text-align: right; }
+table.list td.r, table.list td.d { font-family: var(--f-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.list td.nm { min-width: 14em; }
+table.list tr.cx td { color: var(--muted); text-decoration: line-through; }
+.tag { display: inline-block; font-size: .7rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; color: var(--ink2); white-space: nowrap; }
+.tall { max-height: 560px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.count { font-size: .8rem; color: var(--muted); }
+.explain a { color: var(--accent); }
+/* 棒に触れたときの値 */
+.readout { margin: -4px 0 0; font: 500 .82rem var(--f-num); color: var(--ink); min-height: 1.4em; font-variant-numeric: tabular-nums; }
+.figure svg .dim { opacity: .35; }
+.figure svg text.val { fill: var(--ink); font-weight: 500; }
+table.list td.d { color: var(--ink2); }
+#digOut h3 { margin-top: 4px; }
+/* 広い画面では、左の列（読み込みと条件）を見出しの下に止めておく */
+@media (min-width: 761px) {
+  #mainPanel > .col:first-child { position: sticky; top: calc(var(--hdr, 110px) + 16px); max-height: calc(100vh - var(--hdr, 110px) - 32px); overflow: auto; }
+}
+/* スマホ幅では、読み込み → 購入額 → 集計の条件 → グラフの順に並べ、主な結果をスクロールせずに見せる */
+@media (max-width: 760px) {
+  #mainPanel > .col { display: contents; }
+  #loadBox { order: 1; } #emptyBox, #kpiBox { order: 2; } #optBox { order: 3; } #out > :not(#emptyBox):not(#kpiBox) { order: 4; }
+}
+@media print { .drop, .row .btn, nav.tabs, .brand .theme { display: none !important; } }
+/* 支援リンク（DESIGN.md 4章）：本文の文字色を引き継ぎ、印刷では隠す */
+.support a { color: inherit; white-space: nowrap; }
+@media print { .support { display: none !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <a class="home" href="https://kotaooka.github.io/" title="QC Workbench（ツール一覧）へ戻る">QC Workbench</a><span class="crumb" aria-hidden="true">›</span><h1>Amazon注文履歴アナライザー</h1>
+      <span class="std">Your Orders.zip / CSV</span>
+      <button class="btn theme" id="themeBtn" type="button" aria-label="表示テーマを切り替え">表示：自動</button>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="main" type="button">分析</button>
+      <button role="tab" aria-selected="false" data-tab="items" type="button">明細</button>
+      <button role="tab" aria-selected="false" data-tab="explain" type="button">解説</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- ===== 分析 ===== -->
+  <section class="panel" id="mainPanel">
+    <div class="col">
+      <div class="box" id="loadBox">
+        <h2>注文履歴を読み込む</h2>
+        <label class="drop" id="drop" for="file">
+          <b>ZIPかCSVをここに置く</b>または押して選ぶ
+          <input type="file" id="file" accept=".zip,.csv,application/zip,text/csv" multiple hidden>
+        </label>
+        <p class="hint" id="loadHint">Amazonの「マイデータをリクエストする」で受け取ったYour Orders.zipを、そのまま読み込めます。中のCSV（Order History.csvなど）だけでも読めます。受け取り方は「解説」タブにあります。</p>
+        <ul class="files" id="files"></ul>
+        <div class="row"><button class="btn" type="button" id="demo">例を入れる</button><button class="btn" type="button" id="clear" hidden>データを消す</button></div>
+        <p class="privacy">読み込んだデータは、この端末の外に送りません。保存もしないので、ページを閉じると消えます。</p>
+      </div>
+      <div class="box" id="optBox" hidden>
+        <h2>集計の条件</h2>
+        <div class="fields">
+          <div class="field wide"><label for="period">期間</label><select id="period" class="ui"></select></div>
+          <div class="field wide"><label for="tz">日時のタイムゾーン</label><select id="tz" class="ui"></select></div>
+        </div>
+        <p class="hint">CSVの日時は世界標準時（UTC）です。年・月・時間帯は、選んだタイムゾーンに直して数えます。キャンセルした注文は除きます。</p>
+      </div>
+    </div>
+    <div class="col" id="out">
+      <div class="box" id="emptyBox"><p class="empty">注文履歴を読み込むと、ここに集計が出ます。<br>先に「例を入れる」で、架空のデータで見た目を確かめられます。</p></div>
+      <div class="box" id="kpiBox" hidden>
+        <div><h2 id="kpiTitle">購入額</h2><p class="hint" id="kpiRange"></p></div>
+        <div class="kpi four" id="kpi"></div>
+        <div class="msgs" id="msgs"></div>
+      </div>
+      <div class="box" id="yearBox" hidden>
+        <h2>年別の購入額</h2>
+        <div class="figure" id="figYear"></div>
+        <div class="legend"><span style="--c:var(--s1)">物品</span><span style="--c:var(--s2)">デジタル（会費・電子書籍など）</span></div>
+        <p class="readout" id="roYear" aria-live="polite"></p>
+        <div class="row"><button class="btn" type="button" id="copyYear">年別の表をコピー（Excel用）</button></div>
+      </div>
+      <div class="box" id="monthBox" hidden>
+        <h2 id="monthTitle">月別の購入額</h2>
+        <div class="figure" id="figMonth"></div>
+        <p class="readout" id="roMonth" aria-live="polite"></p>
+        <p class="hint">物品だけで、デジタルは含みません。</p>
+      </div>
+      <div class="box" id="catBox" hidden>
+        <h2>カテゴリ別</h2>
+        <div class="figure" id="figCat"></div>
+        <p class="hint">Amazonの部門（Department）で分け、部門が空の商品は商品名の言葉から推定しています。分け方は「解説」タブにあります。</p>
+      </div>
+      <div class="two" id="timeBox" hidden>
+        <div class="box"><h2>注文する時間帯</h2><div class="figure" id="figHour"></div><p class="hint" id="hourNote"></p></div>
+        <div class="box"><h2>注文する曜日</h2><div class="figure" id="figDow"></div><p class="hint" id="dowNote"></p></div>
+      </div>
+      <div class="box" id="repBox" hidden>
+        <h2>リピート購入</h2>
+        <p class="hint">同じ商品（ASIN）を2回以上買ったものです。間隔は買った日の間の日数の中央値で、定期おトク便やまとめ買いを考える目安になります。</p>
+        <div class="scroll"><table class="list" id="repTable"></table></div>
+        <div class="row"><button class="btn" type="button" id="repMore" hidden></button></div>
+      </div>
+      <div class="box" id="topBox" hidden>
+        <h2>高額の買い物</h2>
+        <div class="scroll"><table class="list" id="topTable"></table></div>
+        <div class="row"><button class="btn" type="button" id="topMore" hidden></button></div>
+      </div>
+      <div class="box" id="digBox" hidden>
+        <h2>デジタル・Kindleの貸出・返品</h2>
+        <div id="digOut" class="col" style="gap:12px"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 明細 ===== -->
+  <section id="itemsPanel" hidden>
+    <div class="col">
+      <div class="box">
+        <div class="row" style="justify-content:space-between"><h2>明細</h2><span class="count" id="itemCount"></span></div>
+        <div class="fields three">
+          <div class="field"><label for="q">商品名で探す</label><input type="text" id="q" placeholder="例：ケーブル"></div>
+          <div class="field"><label for="qCat">カテゴリ</label><select id="qCat" class="ui"></select></div>
+          <div class="field"><label for="qSort">並べ方</label><select id="qSort" class="ui"><option value="date">新しい順</option><option value="amount">金額の高い順</option><option value="name">商品名順</option></select></div>
+        </div>
+        <div class="tall" id="itemsWrap"><table class="list" id="itemTable"></table></div>
+        <p class="hint">期間・タイムゾーンは「分析」タブの条件を使います。最大1,000行まで表示します。取り消し線はキャンセルした注文です。</p>
+        <div class="row"><button class="btn" type="button" id="copyItems">絞り込んだ明細をコピー（Excel用）</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 解説（docs/explanation.mdからtools/build.pyで埋め込む） ===== -->
+  <section id="explainPanel" hidden>
+    <div class="box explain">
+<!--EXPLAIN-START-->
+<h1>Amazon注文履歴アナライザーの解説</h1>
+<p>Amazonから受け取った注文履歴のデータ（Your Orders.zip）を読み込み、いつ・何に・いくら使ったかを集計します。読み込みと集計はブラウザの中だけで行い、データをこの端末の外に送りません。ページを閉じると、読み込んだデータは消えます。</p>
+<h2>注文履歴のデータを受け取る</h2>
+<p>Amazonの「<a href="https://www.amazon.co.jp/gp/help/customer/display.html?nodeId=G5NBVNN2RHXD5BUW">マイデータをリクエストする</a>」から申し込みます。</p>
+<ol>
+<li>Amazon.co.jpにログインし、「アカウントサービス」の「データを管理する」から「マイデータをリクエストする」を開きます</li>
+<li>受け取るデータに「注文履歴」（Your Orders）を選び、「リクエストを送信する」を押します</li>
+<li>届いたメールの確認リンクを押します</li>
+<li>準備ができると、ダウンロードのリンクがメールで届きます。Your Orders.zipをダウンロードします</li>
+</ol>
+<p>準備には数時間〜数日かかることがあります。ZIPは展開せずに、そのままこのツールに読み込めます。</p>
+<h2>読み込むファイル</h2>
+<p>ZIPの中から、次のCSVを見出しで見分けて読みます。ファイル名が変わっていても読めます。請求書のPDFなど、ほかのファイルは読みません。</p>
+<table>
+<thead>
+<tr>
+<th>ファイル</th>
+<th>使うところ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Order History.csv</td>
+<td>物品の注文。集計の中心です</td>
+</tr>
+<tr>
+<td>Digital Content Orders.csv</td>
+<td>デジタルの支払い（プライム会費、電子書籍、動画など）</td>
+</tr>
+<tr>
+<td>Digital Borrowed Items.csv</td>
+<td>Kindle Unlimited・Prime Readingの貸出</td>
+</tr>
+<tr>
+<td>Returns Status.csv</td>
+<td>返品と返金額</td>
+</tr>
+</tbody>
+</table>
+<p>住所・支払い方法・追跡番号の列は、読み込んでも画面に出さず、集計にも使いません。</p>
+<h2>集計のしかた</h2>
+<h3>金額</h3>
+<ul>
+<li>物品の金額は、Order History.csvの「Total Amount」です。商品ごとの支払額で、税・送料・割引を反映した値です（数量が2以上なら数量分の合計）</li>
+<li>Total Amountが空（Not Available）の行は、（Unit Price ＋ Unit Price Tax）× 数量で補います</li>
+<li>「Order Status」がCancelledの行（キャンセルした注文）は除きます</li>
+<li>通貨が複数あるときは、最も多い通貨の注文だけを足します。円とドルを足し合わせないためです</li>
+<li>デジタルの金額は、Digital Content Orders.csvの「Transaction Amount」の合計です。1回の支払いが本体と税の行に分かれているので、足すと支払額になります。返金はマイナスの行で入っています</li>
+</ul>
+<h3>注文数と点数</h3>
+<ul>
+<li>点数は、CSVの行の数（1行 = 1商品）です。同じ商品を2個買った行も1点と数えます</li>
+<li>注文数は、「Order ID」の種類の数です。1回の注文で3商品買えば、3点・1注文です</li>
+<li>1注文あたりの中央値は、注文ごとの合計の中央値です。平均ではなく中央値にしているのは、たまの高額な買い物に引っ張られないようにするためです</li>
+</ul>
+<h3>日時とタイムゾーン</h3>
+<p>CSVの日時は世界標準時（UTC、末尾の「Z」）で書かれています。日本時間ではUTCの9時間後なので、たとえばUTCの12月31日16時の注文は、日本時間では翌年の1月1日1時の注文です。年・月・時間帯・曜日は、選んだタイムゾーンに直してから数えます。</p>
+<h3>期間</h3>
+<table>
+<thead>
+<tr>
+<th>期間</th>
+<th>集計する注文</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全期間</td>
+<td>読み込んだすべて</td>
+</tr>
+<tr>
+<td>直近12か月</td>
+<td>今の日時からさかのぼって365日</td>
+</tr>
+<tr>
+<td>年</td>
+<td>選んだタイムゾーンでのその年の1月1日〜12月31日</td>
+</tr>
+</tbody>
+</table>
+<p>年別のグラフはいつも全期間を出します。棒を押すと、その年だけを集計します（もう一度押すと全期間に戻ります）。</p>
+<h3>カテゴリ</h3>
+<p>Amazonの部門（Department）を、次のように日本語の分類にまとめます。</p>
+<table>
+<thead>
+<tr>
+<th>分類</th>
+<th>部門の例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PC・ガジェット</td>
+<td>Personal Computers、Electronics、Wireless Phone Accessory</td>
+</tr>
+<tr>
+<td>カメラ</td>
+<td>Camera</td>
+</tr>
+<tr>
+<td>車・バイク・自転車</td>
+<td>Automotive、Sports</td>
+</tr>
+<tr>
+<td>衣類・服飾</td>
+<td>Apparel、Shoes、Watch、Luggage</td>
+</tr>
+<tr>
+<td>美容・健康</td>
+<td>Health and Beauty、Beauty、Drugstore</td>
+</tr>
+<tr>
+<td>食品・飲料、キッチン</td>
+<td>Grocery、Kitchen</td>
+</tr>
+<tr>
+<td>家具・日用品</td>
+<td>Home、Furniture、Pet Supplies</td>
+</tr>
+<tr>
+<td>工具・DIY</td>
+<td>Tools &amp; Home Improvement</td>
+</tr>
+<tr>
+<td>本</td>
+<td>Tankobon Hardcover、Tankobon Softcover、Paperback Shinsho、Mook</td>
+</tr>
+<tr>
+<td>文具・事務、ホビー・ゲーム</td>
+<td>Office Product、Toy、Video Game</td>
+</tr>
+</tbody>
+</table>
+<p>部門が空（Not Available）の商品は、商品名の言葉（「ケーブル」「シャンプー」「洗剤」など）で推定します。どれにも当てはまらなければ「その他」です。Electronicsのうち、商品名にカメラやイヤホンなどの言葉があるものは、カメラ・オーディオに分けます。推定なので、分類を間違えることがあります。</p>
+<h3>リピート購入</h3>
+<p>同じ商品（ASIN）を2回以上買ったものを、回数の多い順に出します。間隔は、買った日と次に買った日の間の日数の中央値です。洗剤やサプリのように間隔がほぼ決まっているものは、定期おトク便やまとめ買いを考える目安になります。</p>
+<h3>プライム会費</h3>
+<p>Digital Content Orders.csvの商品名が「Prime」の支払いを、プライム会費として数えます。直近12か月に2回以上払っていれば、月額プランで払っているとみなし、年間プランとの差を出します。</p>
+<table>
+<thead>
+<tr>
+<th>プラン</th>
+<th>会費（税込）</th>
+<th>1年あたり</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>月額</td>
+<td>600円</td>
+<td>7,200円</td>
+</tr>
+<tr>
+<td>年間</td>
+<td>5,900円</td>
+<td>5,900円</td>
+</tr>
+</tbody>
+</table>
+<p>会費は2026年11月時点の公表料金です。会費が変わったときは、ツールの値を直すまで差額は正しくありません。</p>
+<h2>使うときの注意</h2>
+<ul>
+<li>Amazonの書き出したデータをそのまま足し合わせています。クレジットカードの請求額やギフト券の利用とは、締め日やポイント・ギフト券の扱いが違うので、一致しないことがあります</li>
+<li>定期おトク便の割引、ポイントの還元は金額に入っていません</li>
+<li>Amazonビジネス・マーケットプレイスの出品者としての売上は扱いません</li>
+<li>CSVの見出しは、Amazonの書き出し方が変わると変わることがあります。読み込めないときは、ファイルの一覧で「使わない」になっていないか確かめてください</li>
+</ul>
+<!--EXPLAIN-END-->
+    </div>
+  </section>
+  <footer>
+    <a href="https://github.com/kotaooka/amazon-order-analyzer">GitHub</a> ・ MIT License<span class="support"> ・ <a href="https://buymeacoffee.com/kotaooka" target="_blank" rel="noopener"><span aria-hidden="true">☕</span> 開発を応援する（Buy Me a Coffee）</a></span>
+  </footer>
+</main>
+<div id="toast" hidden></div>
+
+<script src="js/amazon-order.js"></script>
+<script src="js/demo.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

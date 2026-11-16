@@ -1,0 +1,9 @@
+node_modules/
+fonts/
+# 自分の注文履歴を誤ってコミットしないため、Amazon から受け取ったデータは置かない
+*.zip
+Your Orders/
+Your Amazon Orders/
+Your Returns & Refunds/
+Additional Data/
+*.csv
