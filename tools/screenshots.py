@@ -64,8 +64,7 @@ with sync_playwright() as p:
     o.set_content(f"""<html><head><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=IBM+Plex+Mono:wght@500">
       <style>svg text{{font-family:var(--f-num);font-size:10.5px;fill:var(--muted)}} .bar{{fill:var(--s1)}} .bar2{{fill:var(--s2)}} .gl{{stroke:var(--grid)}} .ax{{stroke:var(--line)}} .hit{{fill:transparent}} svg{{display:block;width:100%;height:auto}}</style></head>
       <body style="margin:0;width:1200px;height:630px;background:linear-gradient(#1d5c96,#1a5388);font-family:'BIZ UDPGothic';color:#fff;display:flex;align-items:center;gap:40px;padding:0 64px;box-sizing:border-box;{vars_css}">
-      <div style="flex:0 0 440px"><div style="font-size:26px;opacity:.85">QC Workbench</div>
-      <div style="font-size:46px;font-weight:700;line-height:1.3;margin:14px 0 22px">Amazon注文履歴<br>アナライザー</div>
+      <div style="flex:0 0 440px"><div style="font-size:46px;font-weight:700;line-height:1.3;margin:0 0 22px">Amazon注文履歴<br>アナライザー</div>
       <div style="font-size:24px;line-height:1.6;opacity:.92">注文履歴のZIPを読み込み、<br>いつ・何に・いくら使ったかを<br>ブラウザの中だけで集計</div></div>
       <div style="flex:1;background:#fff;border-radius:16px;padding:14px">{svg}</div></body></html>""")
     o.wait_for_load_state('networkidle'); o.evaluate("document.fonts.ready"); o.wait_for_timeout(300)
